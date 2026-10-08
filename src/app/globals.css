@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: #090a0f;
+    --foreground: #f4f4f5;
+    --card: #111218;
+    --card-foreground: #f4f4f5;
+    --popover: #111218;
+    --popover-foreground: #f4f4f5;
+    --primary: #6366f1;
+    --primary-foreground: #ffffff;
+    --secondary: #1a1c24;
+    --secondary-foreground: #e4e4e7;
+    --muted: #1e202b;
+    --muted-foreground: #9ca3af;
+    --accent: #262938;
+    --accent-foreground: #ffffff;
+    --destructive: #ef4444;
+    --destructive-foreground: #ffffff;
+    --border: #22242f;
+    --input: #181a23;
+    --ring: #6366f1;
+    --radius: 0.5rem;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #090a0f;
+}
+::-webkit-scrollbar-thumb {
+  background: #22242f;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #323545;
+}
+
+/* Source message highlight flash animation */
+@keyframes highlightFlash {
+  0% {
+    background-color: rgba(99, 102, 241, 0.35);
+    border-color: #6366f1;
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+  }
+  70% {
+    background-color: rgba(99, 102, 241, 0.15);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.highlight-source-active {
+  animation: highlightFlash 3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}

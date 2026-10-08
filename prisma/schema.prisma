@@ -1,0 +1,327 @@
+// Prisma schema for Echo - Conversation Intelligence & Action Management
+// Compatible with both SQLite (for zero-setup dev & test) and PostgreSQL (for production)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String            @id @default(cuid())
+  name          String
+  email         String            @unique
+  passwordHash  String
+  avatarUrl     String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  memberships   WorkspaceMember[]
+  createdTasks  Task[]            @relation("TaskCreator")
+  assignedTasks TaskAssignee[]
+  comments      Comment[]
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+}
+
+model Workspace {
+  id              String            @id @default(cuid())
+  name            String
+  slug            String            @unique
+  description     String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  members         WorkspaceMember[]
+  projects        Project[]
+  conversations   Conversation[]
+  tasks           Task[]
+  decisions       Decision[]
+  commitments     Commitment[]
+  unresolvedItems UnresolvedItem[]
+  conflicts       Conflict[]
+  entities        Entity[]
+  activityLogs    ActivityLog[]
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        String    @default("MEMBER") // OWNER, ADMIN, MEMBER, VIEWER
+  joinedAt    DateTime  @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+}
+
+model Project {
+  id              String            @id @default(cuid())
+  workspaceId     String
+  name            String
+  description     String?
+  color           String            @default("#4f46e5")
+  status          String            @default("ACTIVE") // ACTIVE, ARCHIVED, COMPLETED
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversations   Conversation[]
+  tasks           Task[]
+  decisions       Decision[]
+  commitments     Commitment[]
+  unresolvedItems UnresolvedItem[]
+  conflicts       Conflict[]
+}
+
+model Conversation {
+  id               String                @id @default(cuid())
+  workspaceId      String
+  projectId        String?
+  title            String
+  rawText          String
+  sourceFormat     String                @default("TEXT") // TEXT, WHATSAPP, SLACK, DISCORD, TELEGRAM, TRANSCRIPT, CSV
+  participantCount Int                   @default(0)
+  messageCount     Int                   @default(0)
+  status           String                @default("IDLE") // IDLE, PROCESSING, ANALYZED, FAILED
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  workspace        Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project          Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  messages         ConversationMessage[]
+  analyses         Analysis[]
+  tasks            Task[]
+  decisions        Decision[]
+  commitments      Commitment[]
+  unresolvedItems  UnresolvedItem[]
+  conflicts        Conflict[]
+  entities         Entity[]
+  comments         Comment[]
+}
+
+model ConversationMessage {
+  id              String           @id @default(cuid())
+  conversationId  String
+  orderIndex      Int
+  speaker         String?
+  timestamp       String?
+  content         String
+  rawMetadata     String?
+
+  conversation    Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tasks           Task[]
+  decisions       Decision[]
+  commitments     Commitment[]
+  unresolvedItems UnresolvedItem[]
+
+  @@index([conversationId, orderIndex])
+}
+
+model Analysis {
+  id             String            @id @default(cuid())
+  conversationId String
+  version        Int               @default(1)
+  summary        String
+  projectStatus  String?
+  keyTopics      String? // JSON string
+  rawJson        String
+  createdAt      DateTime          @default(now())
+
+  conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  versions       AnalysisVersion[]
+}
+
+model AnalysisVersion {
+  id            String   @id @default(cuid())
+  analysisId    String
+  versionNumber Int
+  rawJson       String
+  createdAt     DateTime @default(now())
+
+  analysis      Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+}
+
+model Task {
+  id              String               @id @default(cuid())
+  workspaceId     String
+  projectId       String?
+  conversationId  String?
+  sourceMessageId String?
+  title           String
+  description     String?
+  status          String               @default("TODO") // TODO, IN_PROGRESS, BLOCKED, DONE
+  priority        String               @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  deadline        String?
+  confidence      Float                @default(1.0)
+  sourceQuote     String?
+  createdById     String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project         Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  conversation    Conversation?        @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  sourceMessage   ConversationMessage? @relation(fields: [sourceMessageId], references: [id], onDelete: SetNull)
+  createdBy       User?                @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  assignees       TaskAssignee[]
+  comments        Comment[]
+}
+
+model TaskAssignee {
+  id     String  @id @default(cuid())
+  taskId String
+  userId String?
+  name   String
+
+  task   Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model Decision {
+  id              String               @id @default(cuid())
+  workspaceId     String
+  projectId       String?
+  conversationId  String?
+  sourceMessageId String?
+  title           String
+  description     String?
+  decision        String
+  participants    String?
+  reason          String?
+  status          String               @default("CONFIRMED") // PROPOSED, CONFIRMED, OUTDATED
+  confidence      Float                @default(1.0)
+  date            String?
+  sourceQuote     String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project         Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  conversation    Conversation?        @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  sourceMessage   ConversationMessage? @relation(fields: [sourceMessageId], references: [id], onDelete: SetNull)
+  comments        Comment[]
+}
+
+model Commitment {
+  id              String               @id @default(cuid())
+  workspaceId     String
+  projectId       String?
+  conversationId  String?
+  sourceMessageId String?
+  person          String
+  commitment      String
+  deadline        String?
+  confidence      Float                @default(1.0)
+  status          String               @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, BROKEN
+  sourceQuote     String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project         Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  conversation    Conversation?        @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  sourceMessage   ConversationMessage? @relation(fields: [sourceMessageId], references: [id], onDelete: SetNull)
+}
+
+model UnresolvedItem {
+  id              String               @id @default(cuid())
+  workspaceId     String
+  projectId       String?
+  conversationId  String?
+  sourceMessageId String?
+  question        String
+  context         String?
+  participants    String?
+  status          String               @default("UNRESOLVED") // UNRESOLVED, RESOLVED
+  resolutionNotes String?
+  confidence      Float                @default(1.0)
+  sourceQuote     String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project         Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  conversation    Conversation?        @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  sourceMessage   ConversationMessage? @relation(fields: [sourceMessageId], references: [id], onDelete: SetNull)
+}
+
+model Conflict {
+  id             String        @id @default(cuid())
+  workspaceId    String
+  projectId      String?
+  conversationId String?
+  description    String
+  involvedPeople String
+  severity       String        @default("MEDIUM") // LOW, MEDIUM, HIGH
+  evidence       String
+  status         String        @default("ACTIVE") // ACTIVE, RESOLVED
+  confidence     Float         @default(1.0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project        Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+}
+
+model Entity {
+  id             String        @id @default(cuid())
+  workspaceId    String
+  conversationId String?
+  name           String
+  type           String        @default("CONCEPT") // TOOL, SYSTEM, PERSON, ORG, CONCEPT, METRIC
+  mentionCount   Int           @default(1)
+  metadata       String?
+  createdAt      DateTime      @default(now())
+
+  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+}
+
+model Comment {
+  id             String        @id @default(cuid())
+  userId         String
+  taskId         String?
+  decisionId     String?
+  conversationId String?
+  content        String
+  createdAt      DateTime      @default(now())
+
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task           Task?         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  decision       Decision?     @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("SYSTEM") // TASK_ASSIGNED, CONFLICT_DETECTED, ANALYSIS_COMPLETE, SYSTEM
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ActivityLog {
+  id          String     @id @default(cuid())
+  workspaceId String
+  userId      String?
+  action      String
+  entityType  String
+  entityId    String
+  details     String?
+  createdAt   DateTime   @default(now())
+
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
